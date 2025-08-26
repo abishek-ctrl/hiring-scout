@@ -1,105 +1,73 @@
-import sqlite3
-import os
+import streamlit as st
+from pymongo import MongoClient
+from bson.objectid import ObjectId # To handle MongoDB's default _id
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "hiring_scout.db")
+# --- MongoDB Connection ---
+def get_mongo_client():
+    """Initializes connection to MongoDB Atlas."""
+    # Get the connection string from Streamlit's secrets
+    connection_string = st.secrets["MONGO_CONNECTION_STRING"]
+    client = MongoClient(connection_string)
+    return client
 
 def init_db():
-    """Initialize SQLite DB with tables for sessions, messages, and evaluations."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            privacy_accepted INTEGER DEFAULT 0
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER,
-            role TEXT,
-            content TEXT,
-            FOREIGN KEY(session_id) REFERENCES sessions(id)
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS evaluations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id INTEGER UNIQUE,
-            full_name TEXT,
-            email TEXT,
-            phone TEXT,
-            summary TEXT,
-            strengths TEXT,
-            weaknesses TEXT,
-            score INTEGER,
-            FOREIGN KEY(session_id) REFERENCES sessions(id)
-        )
-    """)
-    conn.commit()
-    conn.close()
+    """
+    Verifies connection to the database and gets the collections.
+    MongoDB creates collections automatically when you first add data.
+    """
+    client = get_mongo_client()
+    db = client.hiring_scout_db # You can name your database anything
+    return db.sessions, db.messages
+
+# --- Session and Message Functions ---
+
+sessions_collection, messages_collection = init_db()
 
 def create_session():
     """Create a new session and return its ID."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO sessions (privacy_accepted) VALUES (0)")
-    conn.commit()
-    session_id = cursor.lastrowid
-    conn.close()
-    return session_id
+    session_data = {"privacy_accepted": False}
+    result = sessions_collection.insert_one(session_data)
+    # Return the ID as a string, as Streamlit's URL params work best with strings
+    return str(result.inserted_id)
 
 def get_session(session_id):
     """Return session data by ID."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, privacy_accepted FROM sessions WHERE id=?", (session_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return {"id": row[0], "privacy_accepted": bool(row[1])}
+    try:
+        # Convert string ID back to ObjectId for querying
+        oid = ObjectId(session_id)
+        session = sessions_collection.find_one({"_id": oid})
+        if session:
+            # Add the 'id' field to be compatible with the old code
+            session['id'] = str(session['_id'])
+            return session
+    except Exception:
+        return None
     return None
+
 
 def set_privacy_accepted(session_id, accepted=True):
     """Update session with privacy acceptance."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE sessions SET privacy_accepted=? WHERE id=?", (1 if accepted else 0, session_id))
-    conn.commit()
-    conn.close()
+    oid = ObjectId(session_id)
+    sessions_collection.update_one(
+        {"_id": oid},
+        {"$set": {"privacy_accepted": accepted}}
+    )
 
 def save_message(session_id, role, content):
     """Save a message in the DB for a session."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)", (session_id, role, content))
-    conn.commit()
-    conn.close()
+    message_data = {
+        "session_id": session_id,
+        "role": role,
+        "content": content,
+    }
+    messages_collection.insert_one(message_data)
 
 def load_messages(session_id):
     """Load all messages for a session."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT role, content FROM messages WHERE session_id=?", (session_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"role": r[0], "content": r[1]} for r in rows]
+    # Find messages and sort them by their creation time (_id)
+    messages_cursor = messages_collection.find({"session_id": session_id}).sort("_id")
+    return [{"role": msg["role"], "content": msg["content"]} for msg in messages_cursor]
 
 def clear_session(session_id):
-    """Delete all messages for a session (GDPR right-to-erasure)."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
-    conn.commit()
-    conn.close()
-
-def save_evaluation(session_id, full_name, email, phone, summary, strengths, weaknesses, score):
-    """Save a candidate evaluation in the DB for a session."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO evaluations (session_id, full_name, email, phone, summary, strengths, weaknesses, score) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (session_id, full_name, email, phone, summary, strengths, weaknesses, score))
-    conn.commit()
-    conn.close()
+    """Delete all messages for a session."""
+    messages_collection.delete_many({"session_id": session_id})

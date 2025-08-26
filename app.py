@@ -19,7 +19,6 @@ st.set_page_config(page_title="Hiring-Scout", page_icon="🤖", layout="wide")
 
 # Setup
 st.markdown(load_css(), unsafe_allow_html=True)
-init_db()
 
 session_id_from_url = None
 try:
