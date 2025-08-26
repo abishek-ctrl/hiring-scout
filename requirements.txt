@@ -1,5 +1,6 @@
 streamlit
 python-dotenv
-google-genai
+# google-genai
 pydantic
 pymongo[srv]
+groq

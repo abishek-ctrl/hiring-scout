@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from core.llm import GeminiChatClient
+from core.llm import GroqChatClient
 from core.prompts import SYSTEM_PROMPT
 from ui.styles import load_css
 from ui.components import render_message
@@ -39,7 +39,7 @@ if "session_id" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": welcome_message}]
     
     st.session_state.chat_active = True
-    st.session_state.gemini_chat_client = GeminiChatClient(
+    st.session_state.groq_chat_client = GroqChatClient(
         system_instruction=SYSTEM_PROMPT,
         history=st.session_state.messages
     )
@@ -131,7 +131,8 @@ if st.session_state.get("chat_active", True):
 
         # 2. Get assistant response
         with st.spinner("Thinking..."):
-            response = st.session_state.gemini_chat_client.send_message(user_input)
+            response = st.session_state.groq_chat_client.send_message(user_input)
+
         
         response_to_show = response
         
@@ -146,7 +147,7 @@ if st.session_state.get("chat_active", True):
 
         if not st.session_state.chat_active:
             with st.spinner("Finalizing evaluation..."):
-                evaluation = st.session_state.gemini_chat_client.generate_evaluation(st.session_state.messages)
+                evaluation = st.session_state.groq_chat_client.generate_evaluation(st.session_state.messages)
                 if evaluation:
                     # Save the new structured data
                     save_evaluation(
