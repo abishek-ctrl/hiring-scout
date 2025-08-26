@@ -4,7 +4,7 @@ import os
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "hiring_scout.db")
 
 def init_db():
-    """Initialize SQLite DB with tables for sessions and messages."""
+    """Initialize SQLite DB with tables for sessions, messages, and evaluations."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -19,6 +19,20 @@ def init_db():
             session_id INTEGER,
             role TEXT,
             content TEXT,
+            FOREIGN KEY(session_id) REFERENCES sessions(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS evaluations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER UNIQUE,
+            full_name TEXT,
+            email TEXT,
+            phone TEXT,
+            summary TEXT,
+            strengths TEXT,
+            weaknesses TEXT,
+            score INTEGER,
             FOREIGN KEY(session_id) REFERENCES sessions(id)
         )
     """)
@@ -76,5 +90,16 @@ def clear_session(session_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    conn.commit()
+    conn.close()
+
+def save_evaluation(session_id, full_name, email, phone, summary, strengths, weaknesses, score):
+    """Save a candidate evaluation in the DB for a session."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO evaluations (session_id, full_name, email, phone, summary, strengths, weaknesses, score) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (session_id, full_name, email, phone, summary, strengths, weaknesses, score))
     conn.commit()
     conn.close()
