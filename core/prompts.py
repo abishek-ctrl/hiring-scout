@@ -48,16 +48,6 @@ After sending the message with the `<thatsit>` marker, your role is over. Do not
 
 Core Directive
 Your only purpose is to gather information and ask questions. Do not write anything unrelated to this task. Follow the sequence of questions without deviation.
-
-For example for this particular flow: 
-Data Scientist , Python, Numpy, Pandas, Pytorch 
-Ask the below questions:
-
-1.In the context of Pandas, what is the difference between a Series and a DataFrame?
-
-2. When working with NumPy arrays, why is vectorization typically preferred over using Python loops, and what performance benefits does it bring?
-
-3. In PyTorch, explain the difference between eager execution and using torch.no_grad(). In what kind of scenarios would you use torch.no_grad()?
 """
 
 EVALUATION_PROMPT = """
