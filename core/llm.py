@@ -80,3 +80,28 @@ class GroqChatClient:
             # This provides a more helpful error message in the terminal
             print(f"Error during evaluation: {e}")
             return None
+
+    def summarize_history(self, chat_history: list) -> str:
+        """
+        Generates a concise summary of a past conversation.
+        """
+        transcript = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in chat_history])
+        
+        summary_prompt = f"""
+        Please provide a concise, one-paragraph summary of the key points 
+        from the following candidate conversation transcript:
+        ---
+        {transcript}
+        ---
+        Focus on the candidate's stated experience, tech stack, and performance on technical questions.
+        """
+        
+        try:
+            response = client.chat.completions.create(
+                messages=[{"role": "user", "content": summary_prompt}],
+                model=self.model,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Error during history summarization: {e}")
+            return "Could not summarize previous conversation."

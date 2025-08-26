@@ -88,3 +88,29 @@ def save_evaluation(session_id, full_name, email, phone, summary, strengths, wea
         {"$set": evaluation_data},
         upsert=True
     )
+
+def find_previous_session_id(email: str, phone: str) -> str | None:
+    """
+    Finds the session_id of the most recent previous evaluation
+    for a candidate based on their email or phone number.
+    """
+    # Build a query that finds a match for either email or phone, if they are provided
+    query_parts = []
+    if email and email != "N/A":
+        query_parts.append({"email": email})
+    if phone and phone != "N/A":
+        query_parts.append({"phone": phone})
+
+    if not query_parts:
+        return None
+
+    # Find any document that matches either the email or phone
+    query = {"$or": query_parts}
+    
+    # Find the most recent evaluation by sorting by the document's creation ID in descending order
+    latest_evaluation = evaluations_collection.find_one(query, sort=[("_id", -1)])
+
+    if latest_evaluation:
+        return latest_evaluation.get("session_id")
+    
+    return None
