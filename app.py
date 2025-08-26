@@ -1,6 +1,8 @@
+# In app.py
+
 import streamlit as st
 from core.llm import GroqChatClient
-from core.prompts import SYSTEM_PROMPT
+from core.prompts import SYSTEM_PROMPT, EVALUATION_PROMPT
 from ui.styles import load_css
 from ui.components import render_message
 from utils.storage import (
@@ -8,13 +10,14 @@ from utils.storage import (
     load_messages,
     save_message,
     save_evaluation,
-    clear_session,
+    delete_all_user_data,
 )
 from utils.validators import validate_email, validate_phone
 
 st.set_page_config(page_title="Hiring-Scout", page_icon="🤖", layout="wide")
 st.markdown(load_css(), unsafe_allow_html=True)
 
+# --- PHASE 1: INITIALIZE SESSION STATE & PRIVACY NOTICE ---
 if "user_details_submitted" not in st.session_state:
     st.session_state.user_details_submitted = False
     st.session_state.privacy_accepted = False
@@ -35,6 +38,7 @@ if not st.session_state.privacy_accepted:
             st.rerun()
     st.stop()
 
+# --- PHASE 2: USER DETAILS FORM ---
 if st.session_state.privacy_accepted and not st.session_state.user_details_submitted:
     st.markdown("### Please provide your details to begin")
     with st.form(key="user_details_form"):
@@ -50,13 +54,16 @@ if st.session_state.privacy_accepted and not st.session_state.user_details_submi
                     
                     st.session_state.session_id = session_id
                     st.session_state.is_new_user = is_new_user
-                    st.session_state.user_name = name # Save name for greeting
+                    st.session_state.user_name = name
+                    st.session_state.user_email = email
+                    st.session_state.user_phone = phone
                     st.session_state.user_details_submitted = True
                     st.rerun()
             else:
                 st.error("Please fill out all fields with valid information.")
     st.stop()
 
+# --- PHASE 3: CHAT INTERFACE ---
 if st.session_state.user_details_submitted:
     if "messages" not in st.session_state:
         st.session_state.messages = load_messages(st.session_state.session_id)
@@ -76,11 +83,11 @@ if st.session_state.user_details_submitted:
         @st.dialog("Manage Your Data")
         def manage_data_dialog():
             st.warning("⚠️ This action is irreversible.")
-            st.write("Clicking 'Delete' will permanently erase all data from this session from our database.")
+            st.write("Clicking 'Delete' will permanently erase **all data** associated with your email and phone number from our database.")
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Delete My Data", type="primary", use_container_width=True):
-                    clear_session(st.session_state.session_id)
+                if st.button("Delete All My Data", type="primary", use_container_width=True):
+                    delete_all_user_data(st.session_state.user_email, st.session_state.user_phone)
                     for key in list(st.session_state.keys()):
                         del st.session_state[key]
                     st.rerun()
@@ -111,22 +118,32 @@ if st.session_state.user_details_submitted:
         
         response_to_show = response
         
-        if response.strip().endswith("{thatsit}"):
-            response_to_show = response.strip().replace("{thatsit}", "")
+        # Check for the new <thatsit> marker
+        if response.strip().endswith("<thatsit>"):
+            # Clean the response to hide the marker from the UI
+            response_to_show = response.strip().replace("<thatsit>", "")
             st.session_state.evaluation_done = True
             
             with st.spinner("Finalizing evaluation..."):
-                evaluation = st.session_state.groq_chat_client.generate_evaluation(st.session_state.messages)
+                evaluation = st.session_state.groq_chat_client.generate_evaluation(
+                    chat_history=st.session_state.messages,
+                    full_name=st.session_state.user_name,
+                    email=st.session_state.user_email,
+                    phone=st.session_state.user_phone
+                )
                 if evaluation:
                     save_evaluation(
                         st.session_state.session_id,
-                        evaluation.get("full_name", "N/A"),
-                        evaluation.get("email", "N/A"),
-                        evaluation.get("phone", "N/A"),
-                        evaluation.get("summary"),
-                        evaluation.get("strengths"),
-                        evaluation.get("weaknesses"),
-                        evaluation.get("score"),
+                        st.session_state.user_name,
+                        st.session_state.user_email,
+                        st.session_state.user_phone,
+                        evaluation.get("years_of_experience", "N/A"),
+                        evaluation.get("current_location", "N/A"),
+                        evaluation.get("tech_stack", []),
+                        evaluation.get("summary", ""),
+                        evaluation.get("strengths", []),
+                        evaluation.get("weaknesses", []),
+                        evaluation.get("score", 0),
                     )
         
         st.session_state.messages.append({"role": "assistant", "content": response_to_show})

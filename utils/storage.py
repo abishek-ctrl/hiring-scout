@@ -1,10 +1,13 @@
 import streamlit as st
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- MongoDB Connection ---
 def get_mongo_client():
-    connection_string = st.secrets["MONGO_CONNECTION_STRING"]
+    connection_string = os.environ.get("MONGO_CONNECTION_STRING")
     client = MongoClient(connection_string)
     return client
 
@@ -16,26 +19,16 @@ def init_db():
 sessions_collection, messages_collection, evaluations_collection = init_db()
 
 def get_or_create_user_session(name: str, email: str, phone: str):
-    """
-    Finds a returning user's session or creates a new one.
-    Returns the session_id and a boolean indicating if the user is new.
-    """
-    # Build a query to find a match for either email or phone
     query = {"$or": [{"email": email}, {"phone": phone}]}
     latest_evaluation = evaluations_collection.find_one(query, sort=[("_id", -1)])
 
     if latest_evaluation:
-        # --- RETURNING USER ---
-        session_id = latest_evaluation["session_id"]
-        return session_id, False # False means is_new_user = False
+        return latest_evaluation["session_id"], False
     else:
-        # --- NEW USER ---
-        # 1. Create a new session document
         session_data = {"privacy_accepted": True}
         result = sessions_collection.insert_one(session_data)
         new_session_id = str(result.inserted_id)
-
-        # 2. Immediately create a basic evaluation record to "claim" this user
+        
         initial_evaluation = {
             "session_id": new_session_id,
             "full_name": name,
@@ -44,42 +37,43 @@ def get_or_create_user_session(name: str, email: str, phone: str):
         }
         evaluations_collection.insert_one(initial_evaluation)
         
-        return new_session_id, True # True means is_new_user = True
+        return new_session_id, True
 
-def get_session(session_id):
-    try:
-        oid = ObjectId(session_id)
-        session = sessions_collection.find_one({"_id": oid})
-        if session:
-            session['id'] = str(session['_id'])
-            return session
-    except Exception:
-        return None
-    return None
+def delete_all_user_data(email: str, phone: str):
+    """
+    Finds and deletes ALL data for a user based on their email or phone.
+    This is a true "right to be forgotten" function.
+    """
+    query = {"$or": [{"email": email}, {"phone": phone}]}
+    user_evaluations = list(evaluations_collection.find(query))
 
-def set_privacy_accepted(session_id, accepted=True):
-    oid = ObjectId(session_id)
-    sessions_collection.update_one({"_id": oid}, {"$set": {"privacy_accepted": accepted}})
+    if not user_evaluations:
+        return
 
-def save_message(session_id, role, content):
-    message_data = {"session_id": session_id, "role": role, "content": content}
-    messages_collection.insert_one(message_data)
+    session_ids_to_delete = list(set(eval_doc["session_id"] for eval_doc in user_evaluations))
+    session_object_ids_to_delete = [ObjectId(sid) for sid in session_ids_to_delete]
+
+    if session_ids_to_delete:
+        messages_collection.delete_many({"session_id": {"$in": session_ids_to_delete}})
+        evaluations_collection.delete_many({"session_id": {"$in": session_ids_to_delete}})
+        sessions_collection.delete_many({"_id": {"$in": session_object_ids_to_delete}})
 
 def load_messages(session_id):
     messages_cursor = messages_collection.find({"session_id": session_id}).sort("_id")
     return [{"role": msg["role"], "content": msg["content"]} for msg in messages_cursor]
 
-def clear_session(session_id):
-    oid = ObjectId(session_id)
-    messages_collection.delete_many({"session_id": session_id})
-    evaluations_collection.delete_many({"session_id": session_id})
-    sessions_collection.delete_one({"_id": oid})
+def save_message(session_id, role, content):
+    message_data = {"session_id": session_id, "role": role, "content": content}
+    messages_collection.insert_one(message_data)
 
-def save_evaluation(session_id, full_name, email, phone, summary, strengths, weaknesses, score):
+def save_evaluation(session_id, full_name, email, phone, years_of_experience, current_location, tech_stack, summary, strengths, weaknesses, score):
     evaluation_data = {
         "full_name": full_name,
         "email": email,
         "phone": phone,
+        "years_of_experience": years_of_experience,
+        "current_location": current_location,
+        "tech_stack": tech_stack,
         "summary": summary,
         "strengths": strengths,
         "weaknesses": weaknesses,
