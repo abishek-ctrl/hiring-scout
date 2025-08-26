@@ -1,26 +1,34 @@
+import os
 import json
-import streamlit as st
+from dotenv import load_dotenv
 from groq import Groq
 from .prompts import EVALUATION_PROMPT
-from dotenv import load_dotenv
+
+# Load environment variables from the .env file
 load_dotenv()
 
-client = Groq()
+# Fetch credentials and configuration from environment variables
+api_key = os.environ.get("GROQ_API_KEY")
+model_name = os.environ.get("GROQ_MODEL_NAME")
 
+# A robust check to ensure the app doesn't start without necessary secrets
+if not api_key or not model_name:
+    raise ValueError("GROQ_API_KEY and GROQ_MODEL_NAME must be set in your .env file.")
+
+# Instantiate the main client that will be used by the class
+client = Groq(api_key=api_key)
 
 
 class GroqChatClient:
     """
     A class to handle stateful chat sessions with the Groq API.
+    It reads the model name from the environment, so it doesn't need to be passed in.
     """
-    def __init__(self, model_name="qwen/qwen2-72b-instruct", system_instruction=None, history=None):
-        """
-        Initializes the chat session for the stateless Groq API.
-        """
+    def __init__(self, system_instruction=None, history=None):
         self.model = model_name
         self.history = []
 
-        # Set the system prompt
+        # Set the system prompt for the conversation
         if system_instruction:
             self.history.append({"role": "system", "content": system_instruction})
 
@@ -33,19 +41,15 @@ class GroqChatClient:
         """
         Sends a message by passing the entire history to the Groq API.
         """
-        # Add the new user message to our history
         self.history.append({"role": "user", "content": message})
 
-        # Make the API call
         chat_completion = client.chat.completions.create(
             messages=self.history,
-            model=self.model,
-            stream=False,
+            model=self.model
         )
-        # Get the response
         response_content = chat_completion.choices[0].message.content
 
-        # Add the assistant's response to our history
+        # Maintain the state by adding the assistant's response to the history
         self.history.append({"role": "assistant", "content": response_content})
 
         return response_content
@@ -58,7 +62,6 @@ class GroqChatClient:
         prompt = EVALUATION_PROMPT.format(chat_history=transcript)
         
         try:
-            # Create a messages list specifically for this one-time evaluation
             evaluation_messages = [
                 {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                 {"role": "user", "content": prompt}
@@ -67,14 +70,13 @@ class GroqChatClient:
             response = client.chat.completions.create(
                 messages=evaluation_messages,
                 model=self.model,
-                response_format={"type": "json_object"}, # Use JSON mode for reliability
-                stream=False,
+                response_format={"type": "json_object"},
             )
             
             json_text = response.choices[0].message.content
             return json.loads(json_text)
             
         except Exception as e:
-            print(f"Error generating or parsing evaluation: {e}")
-            st.error("Failed to generate the final candidate evaluation.")
+            # This provides a more helpful error message in the terminal
+            print(f"Error during evaluation: {e}")
             return None
