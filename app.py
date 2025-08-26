@@ -5,7 +5,6 @@ from core.prompts import SYSTEM_PROMPT
 from ui.styles import load_css
 from ui.components import render_message
 from utils.storage import (
-    init_db,
     create_session,
     get_session,
     set_privacy_accepted,

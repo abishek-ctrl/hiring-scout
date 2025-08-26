@@ -1,8 +1,7 @@
 import streamlit as st
 from pymongo import MongoClient
-from bson.objectid import ObjectId # To handle MongoDB's default _id
+from bson.objectid import ObjectId
 
-# --- MongoDB Connection ---
 def get_mongo_client():
     """Initializes connection to MongoDB Atlas."""
     # Get the connection string from Streamlit's secrets
@@ -17,11 +16,10 @@ def init_db():
     """
     client = get_mongo_client()
     db = client.hiring_scout_db # You can name your database anything
-    return db.sessions, db.messages
+    # Add the new evaluations_collection
+    return db.sessions, db.messages, db.evaluations
 
-# --- Session and Message Functions ---
-
-sessions_collection, messages_collection = init_db()
+sessions_collection, messages_collection, evaluations_collection = init_db()
 
 def create_session():
     """Create a new session and return its ID."""
@@ -64,10 +62,29 @@ def save_message(session_id, role, content):
 
 def load_messages(session_id):
     """Load all messages for a session."""
-    # Find messages and sort them by their creation time (_id)
     messages_cursor = messages_collection.find({"session_id": session_id}).sort("_id")
     return [{"role": msg["role"], "content": msg["content"]} for msg in messages_cursor]
 
 def clear_session(session_id):
     """Delete all messages for a session."""
     messages_collection.delete_many({"session_id": session_id})
+
+def save_evaluation(session_id, full_name, email, phone, summary, strengths, weaknesses, score):
+    """Save a candidate evaluation in the DB for a session."""
+    evaluation_data = {
+        "session_id": session_id,
+        "full_name": full_name,
+        "email": email,
+        "phone": phone,
+        "summary": summary,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "score": score,
+    }
+    # Use update_one with upsert=True to either insert a new evaluation
+    # or update an existing one for the same session_id.
+    evaluations_collection.update_one(
+        {"session_id": session_id},
+        {"$set": evaluation_data},
+        upsert=True
+    )
