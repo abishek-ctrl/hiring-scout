@@ -1,7 +1,3 @@
-"""
-Input validation utilities.
-"""
-
 import re
 
 def validate_email(email: str) -> bool:

@@ -1,5 +1,3 @@
-# In app.py
-
 import streamlit as st
 from core.llm import GroqChatClient
 from core.prompts import SYSTEM_PROMPT, EVALUATION_PROMPT
@@ -38,7 +36,6 @@ if not st.session_state.privacy_accepted:
             st.rerun()
     st.stop()
 
-# --- PHASE 2: USER DETAILS FORM ---
 if st.session_state.privacy_accepted and not st.session_state.user_details_submitted:
     st.markdown("### Please provide your details to begin")
     with st.form(key="user_details_form"):
