@@ -70,7 +70,10 @@ def load_messages(session_id):
     return [{"role": msg["role"], "content": msg["content"]} for msg in messages_cursor]
 
 def clear_session(session_id):
+    oid = ObjectId(session_id)
     messages_collection.delete_many({"session_id": session_id})
+    evaluations_collection.delete_many({"session_id": session_id})
+    sessions_collection.delete_one({"_id": oid})
 
 def save_evaluation(session_id, full_name, email, phone, summary, strengths, weaknesses, score):
     evaluation_data = {

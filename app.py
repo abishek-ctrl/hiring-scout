@@ -1,6 +1,6 @@
 import streamlit as st
 from core.llm import GroqChatClient
-from core.prompts import SYSTEM_PROMPT, EVALUATION_PROMPT
+from core.prompts import SYSTEM_PROMPT
 from ui.styles import load_css
 from ui.components import render_message
 from utils.storage import (
@@ -8,16 +8,17 @@ from utils.storage import (
     load_messages,
     save_message,
     save_evaluation,
+    clear_session,
 )
 from utils.validators import validate_email, validate_phone
 
 st.set_page_config(page_title="Hiring-Scout", page_icon="🤖", layout="wide")
 st.markdown(load_css(), unsafe_allow_html=True)
 
-# --- PHASE 1: INITIALIZE SESSION STATE & PRIVACY NOTICE ---
 if "user_details_submitted" not in st.session_state:
     st.session_state.user_details_submitted = False
     st.session_state.privacy_accepted = False
+    st.session_state.show_data_dialog = False
 
 if not st.session_state.privacy_accepted:
     with st.container(border=True):
@@ -34,7 +35,6 @@ if not st.session_state.privacy_accepted:
             st.rerun()
     st.stop()
 
-# --- PHASE 2: USER DETAILS FORM ---
 if st.session_state.privacy_accepted and not st.session_state.user_details_submitted:
     st.markdown("### Please provide your details to begin")
     with st.form(key="user_details_form"):
@@ -57,14 +57,11 @@ if st.session_state.privacy_accepted and not st.session_state.user_details_submi
                 st.error("Please fill out all fields with valid information.")
     st.stop()
 
-# --- PHASE 3: CHAT INTERFACE ---
 if st.session_state.user_details_submitted:
-    # Initialize chat client and messages ONCE
     if "messages" not in st.session_state:
         st.session_state.messages = load_messages(st.session_state.session_id)
         
         if st.session_state.is_new_user and not st.session_state.messages:
-            # For a brand new user, create the first message
             user_name = st.session_state.user_name
             welcome_message = f"Hello {user_name}, and thank you for your interest. To begin, how many years of professional experience do you have?"
             st.session_state.messages.append({"role": "assistant", "content": welcome_message})
@@ -75,12 +72,35 @@ if st.session_state.user_details_submitted:
             history=st.session_state.messages
         )
 
-    # Render Title and Chat History
+    if st.session_state.show_data_dialog:
+        @st.dialog("Manage Your Data")
+        def manage_data_dialog():
+            st.warning("⚠️ This action is irreversible.")
+            st.write("Clicking 'Delete' will permanently erase all data from this session from our database.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Delete My Data", type="primary", use_container_width=True):
+                    clear_session(st.session_state.session_id)
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
+                    st.rerun()
+            with col2:
+                if st.button("Cancel", use_container_width=True):
+                    st.session_state.show_data_dialog = False
+                    st.rerun()
+        manage_data_dialog()
+
     st.markdown('<div class="title-container"><h1>🤖 Hiring-Scout</h1></div>', unsafe_allow_html=True)
+    
+    _, col_btn = st.columns([0.8, 0.2])
+    with col_btn:
+        if st.button("⚙️ Manage My Data", use_container_width=True):
+            st.session_state.show_data_dialog = True
+            st.rerun()
+
     for msg in st.session_state.messages:
         render_message(msg["role"], msg["content"])
 
-    # Chat input logic
     user_input = st.chat_input("Type your response...")
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
