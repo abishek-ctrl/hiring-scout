@@ -9,6 +9,8 @@ try:
 except (KeyError, AttributeError):
     st.error("GROQ_API_KEY not found in Streamlit secrets. Please add it.")
     st.stop()
+from dotenv import load_dotenv
+load_dotenv()
 
 
 class GroqChatClient:
