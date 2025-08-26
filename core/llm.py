@@ -4,11 +4,8 @@ import streamlit as st
 import google.genai as genai
 from .prompts import EVALUATION_PROMPT
 
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-except (KeyError, AttributeError):
-    st.error("GEMINI_API_KEY not found in Streamlit secrets. Please add it.")
-    st.stop()
+from dotenv import load_dotenv
+load_dotenv()
 
 class GeminiChatClient:
     """
