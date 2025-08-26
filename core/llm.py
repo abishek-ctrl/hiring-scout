@@ -2,7 +2,7 @@ import os
 import json
 import streamlit as st
 import google.genai as genai
-from prompts import EVALUATION_PROMPT
+from .prompts import EVALUATION_PROMPT
 
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
